@@ -1,0 +1,843 @@
+#from tryscat1.R
+library(GenomicRanges)
+library(SKAT)
+outfolders=c("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_TCGA_PC4",
+             "/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_GTEx_PC4",
+             "/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_GTExmucosa")
+load("/fh/fast/stanford_j/Xiaoyu/QTL/data/GTEx/gtex_ge_anno.RData")
+proteingenes=unique(gtex_ge_anno$Symbol[gtex_ge_anno$gene_type=="protein_coding"])
+
+load(paste0(outfolders[1],"/bca_predict_geneexp.RData"))
+geneexpsamplenames=strsplit(colnames(predict_1se)[3:ncol(predict_1se)],"_")
+geneexpsamplenames=sapply(1:length(geneexpsamplenames),function(x){
+  tmp=geneexpsamplenames[[x]]
+  paste0(tmp[2:length(tmp)],collapse = "_")
+})
+
+readeigenstrat=function(eigfile="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/bca_filtered_10Jan2019.pca",
+                        eigsampfile="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/bca_filtered_10Jan2019.pedind",
+                        thesamples=geneexpsamplenames,nskip=16,opt=1)
+{
+  tmp=read.table(eigfile,skip=nskip,stringsAsFactors = F)
+  if (opt==1)
+  {
+    eigsamples=read.table(eigsampfile,stringsAsFactors = F)
+    eigsamples=eigsamples$V2
+    idx=match(thesamples,eigsamples)
+    tmp1=tmp[idx,]
+    tmp1=as.data.frame(t(tmp1))
+    colnames(tmp1)=thesamples
+  }else #don't need to change sample names
+  {
+    tmp1=as.data.frame(t(tmp))
+    colnames(tmp1)=thesamples
+  }
+  rownames(tmp1)=paste0("pc",1:nrow(tmp1))
+  return(tmp1)
+}
+
+
+compute_fwer_fdr=function(dat=skat_min_code,cutoff=0.05)
+{
+  compute_fdr=function(dat,namecol="BE_p",cutoff1=cutoff)
+  {
+    res=NULL
+    pvalues=dat[,which(colnames(dat)==namecol)]
+    names(pvalues)=rownames(dat)
+    tmp=p.adjust(pvalues,method="fdr")
+    if (sum(tmp<cutoff1,na.rm = T)>0)
+    {
+      res=tmp[which(tmp<cutoff)]
+      res=res[order(res)]
+    }
+    return(res)
+  }
+  compute_fwer=function(dat,namecol="BE_p",cutoff1=cutoff)
+  {
+    res=NULL
+    pvalues=dat[,which(colnames(dat)==namecol)]
+    names(pvalues)=rownames(dat)
+    tmp=p.adjust(pvalues,method = "bonferroni")
+    if (sum(tmp<cutoff,na.rm = T)>0)
+    {
+      res=tmp[which(tmp<cutoff1)]
+      res=res[order(res)]
+    }
+    return(res)
+  }
+  BE_fdr=compute_fdr(dat,namecol="BE_p")
+  BE_fwer=compute_fwer(dat,namecol="BE_p")
+  EA_fdr=compute_fdr(dat,namecol="EA_p")
+  EA_fwer=compute_fwer(dat,namecol="EA_p")
+  BEA_fdr=compute_fdr(dat,namecol="BEA_p")
+  BEA_fwer=compute_fwer(dat,namecol="BEA_p")
+  BEEA_fdr=compute_fdr(dat,namecol="BEEA_p")
+  BEEA_fwer=compute_fwer(dat,namecol="BEEA_p")
+  return(list(BE_fdr=BE_fdr,BE_fwer=BE_fwer,EA_fdr=EA_fdr,EA_fwer=EA_fwer,
+              BEA_fdr=BEA_fdr,BEA_fwer=BEA_fwer,BEEA_fdr=BEEA_fdr,BEEA_fwer=BEEA_fwer))
+}
+
+updategenenames=function(genes)
+{
+  genemap=data.frame(old="LASS1",new="CERS1",stringsAsFactors = F)
+  genemap=rbind.data.frame(genemap,data.frame(old="C19orf50",new="KXD1",stringsAsFactors = F))
+  #add rows if necessary
+  
+  res=genes
+  genes1=intersect(genes,genemap$old)
+  if (length(genes1)>0)
+  {
+    idx=match(genes1, genes)
+    idx1=match(genes1,genemap$old)
+    genes[idx]=genemap$new[idx1]
+  }
+  return(genes)
+}
+
+computeeQTL1=function(selectedsnps,snp,phenotype,covariate,gene="DDX49")
+{
+  res=data.frame(snp=selectedsnps,eqtl=NA,stringsAsFactors = F)
+  j=which(rownames(phenotype)==gene)
+  selectedsnps_alt=sapply(selectedsnps,function(x){
+    tmp=unlist(strsplit(x,"_"))
+    paste0(tmp[c(1,3,2)],collapse = "_")
+  })
+  idx3=which(selectedsnps_alt %in% rownames(snp))
+  if (length(idx3)>0) selectedsnps[idx3]=selectedsnps_alt[idx3]
+  idx3=which(selectedsnps %in% rownames(snp))
+  if (length(j)>0 & length(idx3)>0)
+  {
+    Y=unlist(phenotype[j,])
+    for (i in idx3)
+    {
+      X=t(snp[which(rownames(snp)==selectedsnps[i]),,drop=F])
+      Xall=data.matrix(cbind(X,covariate))
+      fit1=lm(Y~Xall)
+      res$eqtl[i]=summary(fit1)$coefficients[2,4]
+    }
+  }
+  return(res)
+}
+
+computeeQTL2=function(selectedsnps,snp,phenotype,copynumber,mutation,covariate,gene="DDX49") #TCGA
+{
+  res=data.frame(snp=selectedsnps,eqtl=NA,stringsAsFactors = F)
+  j=which(rownames(phenotype)==gene)
+  selectedsnps_alt=sapply(selectedsnps,function(x){
+    tmp=unlist(strsplit(x,"_"))
+    paste0(tmp[c(1,3,2)],collapse = "_")
+  })
+  idx3=which(selectedsnps_alt %in% rownames(snp))
+  if (length(idx3)>0) selectedsnps[idx3]=selectedsnps_alt[idx3]
+  idx3=which(selectedsnps %in% rownames(snp))
+  if (length(j)>0 & length(idx3)>0)
+  {
+    Y=unlist(phenotype[j,])
+    for (i in idx3)
+    {
+      X=t(snp[which(rownames(snp)==selectedsnps[i]),,drop=F])
+      mutationV=unlist(mutation[j,])
+      if (all(mutationV==0)) #no mutation
+      {
+        Xall=data.matrix(cbind(X,cn=unlist(copynumber[j,]),covariate))
+        covariateall=data.matrix(cbind(cn=unlist(copynumber[j,]),covariate))
+      }else
+      {
+        Xall=data.matrix(cbind(X,cn=unlist(copynumber[j,]),mutation=mutationV,covariate))
+        covariateall=data.matrix(cbind(cn=unlist(copynumber[j,]),mutation=mutationV,covariate))
+      }
+      fit1=lm(Y~Xall)
+      res$eqtl[i]=summary(fit1)$coefficients[2,4]
+    }
+  }
+  return(res)
+}
+
+update_bcasamplenames=function(bcasamples=colnames(bcagenotype))
+{
+  if (grepl("_",bcasamples[1]))
+  {
+    bcasamples=sapply(bcasamples,function(x){
+      tmp=unlist(strsplit(x,"_"))
+      paste0(tmp[2:length(tmp)],collapse = "_")
+    })
+  }
+  return(bcasamples)
+}
+
+pvalue_assoc_selectedsnps=function(selectedsnps,bcagenotype) #outcome ~SNP
+{
+  comsamples=intersect(sampletable$localid,colnames(bcagenotype))
+  idx=match(comsamples,colnames(bcagenotype))
+  bcagenotype_=bcagenotype[,idx]
+  idx=match(comsamples,sampletable$localid)
+  sampletable_=sampletable[idx,]
+  # idx=match(comsamples,colnames(eigenstratmatrix))
+  # sampletable_=cbind.data.frame(sampletable_,t(eigenstratmatrix[1:4,idx]))
+  
+  res=data.frame(snp=selectedsnps,BE_p=NA,EA_p=NA,BEA_p=NA,BEEA_p=NA)
+  selectedsnps_alt=sapply(selectedsnps,function(x){
+    tmp=unlist(strsplit(x,"_"))
+    paste0(tmp[c(1,3,2)],collapse = "_")
+  })
+  idx3=which(selectedsnps_alt %in% rownames(bcagenotype_))
+  if (length(idx3)>0) selectedsnps[idx3]=selectedsnps_alt[idx3]
+  idx1=which(sampletable_$phenoBE_bc==2) #case
+  idx2=which(sampletable_$phenoBE_bc==1)
+  y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+  for (i in 1:length(selectedsnps))
+  {
+    x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+    fm=glm(y~x+age+sex+pc1+pc2+pc3+pc4,data=sampletable_[c(idx1,idx2),],family=binomial)
+    #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+    tmp=summary(fm)$coefficients
+    if ("x" %in% rownames(tmp))
+    {
+      res$BE_p[i]=summary(fm)$coefficients[2,4]
+    }
+  }
+  
+  idx1=which(sampletable_$phenoEA_bc==2) #case
+  idx2=which(sampletable_$phenoEA_bc==1)
+  y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+  for (i in 1:length(selectedsnps))
+  {
+    x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+    fm=glm(y~x+age+sex+pc1+pc2+pc3+pc4,data=sampletable_[c(idx1,idx2),],family=binomial)
+    #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+    tmp=summary(fm)$coefficients
+    if ("x" %in% rownames(tmp))
+    {
+      res$EA_p[i]=summary(fm)$coefficients[2,4]
+    }
+  }
+  
+  idx1=which(sampletable_$phenoEA_bc==2) # EAcase
+  idx2=which(sampletable_$phenoBE_bc==2) #BEcase
+  y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+  for (i in 1:length(selectedsnps))
+  {
+    x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+    fm=glm(y~x+age+sex+pc1+pc2+pc3+pc4,data=sampletable_[c(idx1,idx2),],family=binomial)
+    #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+    tmp=summary(fm)$coefficients
+    if ("x" %in% rownames(tmp))
+    {
+      res$BEA_p[i]=summary(fm)$coefficients[2,4]
+    }
+  }
+  
+  idx1=which(sampletable_$phenoBE_bc==2 | sampletable_$phenoEA_bc==2) #BE or EAcase
+  idx2=which(sampletable_$phenoBE_bc==1 |sampletable_$phenoEA_bc==1) #Control
+  y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+  for (i in 1:length(selectedsnps))
+  {
+    x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+    fm=glm(y~x+age+sex+pc1+pc2+pc3+pc4,data=sampletable_[c(idx1,idx2),],family=binomial)
+    #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+    tmp=summary(fm)$coefficients
+    if ("x" %in% rownames(tmp))
+    {
+      res$BEEA_p[i]=summary(fm)$coefficients[2,4]
+    }
+  }
+  
+  return(res)
+}
+
+sampletable=read.table("/fh/fast/dai_j/BEACON/BEACON_GRANT/data/bc_AT_JD1.csv",header=T,sep=",",stringsAsFactors=F)
+sampletable$site[sampletable$site=="NA"]=NA
+for (i in 1:ncol(sampletable)) sampletable[which(sampletable[,i]==-9),i]=NA
+load(paste0(outfolders[1],"/bca_extractgenotype.RData"))
+tmp=colnames(bcagenotype)
+if (grepl("_",tmp[1]))
+{
+  tmp=strsplit(tmp,"_")
+  tmp1=sapply(1:length(tmp),function(x){
+    tmp1=tmp[[x]]
+    paste0(tmp1[2:length(tmp1)],collapse = "_")
+  })
+  colnames(bcagenotype)=tmp1
+}
+
+eigenstratmatrix=readeigenstrat()
+allsamples=intersect(colnames(bcagenotype),sampletable$localid)
+idx=match(allsamples,sampletable$localid)
+sampletable=sampletable[idx,]
+rownames(sampletable)=sampletable$localid
+idx=match(allsamples,colnames(eigenstratmatrix))
+eigenstratmatrix=eigenstratmatrix[,idx]
+sampletable=cbind(sampletable,t(eigenstratmatrix[1:4,]))
+X=sampletable[,colnames(sampletable) %in% c("sex","age","pc1","pc2","pc3","pc4")]
+rownames(X)=sampletable$localid
+X$age[is.na(X$age)]=mean(X$age,na.rm = T)
+
+load("../result/Dong23SNPs.RData")
+tmp=sapply(rownames(dat),function(x){
+  tmp1=unlist(strsplit(x,"_"))
+  paste0(tmp1[2:length(tmp1)],collapse = "_")
+})
+rownames(dat)=tmp
+idx=match(allsamples,rownames(dat))
+#bca_gwasdat=dat[idx,c(1:23,49:51)]
+bca_gwasdat=dat[idx,c(1:23)]
+
+#Association snps adjust for GWAS
+pvalue_assoc_selectedsnps_adjgwas=function(selectedsnps,bcagenotype,selectedsnps_gwasdist) #outcome ~SNP
+{
+  res=NA
+  if (class(selectedsnps_gwasdist)=="data.frame")
+  {
+    comsamples=intersect(sampletable$localid,colnames(bcagenotype))
+    idx=match(comsamples,colnames(bcagenotype))
+    bcagenotype_=bcagenotype[,idx]
+    idx=match(comsamples,sampletable$localid)
+    sampletable_=sampletable[idx,]
+    idx=match(comsamples,rownames(bca_gwasdat))
+    bca_gwasdat_=bca_gwasdat[idx,]
+    idxgwas=which(colnames(bca_gwasdat) %in% selectedsnps_gwasdist$gwas)
+    bca_gwasdat_=bca_gwasdat_[,idxgwas,drop=F]
+    res=data.frame(snp=selectedsnps,BE_p=NA,EA_p=NA,BEA_p=NA,BEEA_p=NA)
+    selectedsnps_alt=sapply(selectedsnps,function(x){
+      tmp=unlist(strsplit(x,"_"))
+      paste0(tmp[c(1,3,2)],collapse = "_")
+    })
+    idx3=which(selectedsnps_alt %in% rownames(bcagenotype_))
+    if (length(idx3)>0) selectedsnps[idx3]=selectedsnps_alt[idx3]
+    idx1=which(sampletable_$phenoBE_bc==2) #case
+    idx2=which(sampletable_$phenoBE_bc==1)
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BE_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoEA_bc==2) #case
+    idx2=which(sampletable_$phenoEA_bc==1)
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$EA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoEA_bc==2) # EAcase
+    idx2=which(sampletable_$phenoBE_bc==2) #BEcase
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BEA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoBE_bc==2 | sampletable_$phenoEA_bc==2) #BE or EAcase
+    idx2=which(sampletable_$phenoBE_bc==1 |sampletable_$phenoEA_bc==1) #Control
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BEEA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+  }
+  
+  return(res)
+}
+
+pvalue_assoc_selectedsnps_adjgwas=function(selectedsnps,bcagenotype,selectedsnps_gwasdist) #outcome ~SNP
+{
+  res=NA
+  if (class(selectedsnps_gwasdist)=="data.frame")
+  {
+    comsamples=intersect(sampletable$localid,colnames(bcagenotype))
+    idx=match(comsamples,colnames(bcagenotype))
+    bcagenotype_=bcagenotype[,idx]
+    idx=match(comsamples,sampletable$localid)
+    sampletable_=sampletable[idx,]
+    idx=match(comsamples,rownames(bca_gwasdat))
+    bca_gwasdat_=bca_gwasdat[idx,]
+    idxgwas=which(colnames(bca_gwasdat) %in% selectedsnps_gwasdist$gwas)
+    bca_gwasdat_=bca_gwasdat_[,idxgwas,drop=F]
+    res=data.frame(snp=selectedsnps,BE_p=NA,EA_p=NA,BEA_p=NA,BEEA_p=NA)
+    selectedsnps_alt=sapply(selectedsnps,function(x){
+      tmp=unlist(strsplit(x,"_"))
+      paste0(tmp[c(1,3,2)],collapse = "_")
+    })
+    idx3=which(selectedsnps_alt %in% rownames(bcagenotype_))
+    if (length(idx3)>0) selectedsnps[idx3]=selectedsnps_alt[idx3]
+    idx1=which(sampletable_$phenoBE_bc==2) #case
+    idx2=which(sampletable_$phenoBE_bc==1)
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BE_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoEA_bc==2) #case
+    idx2=which(sampletable_$phenoEA_bc==1)
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$EA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoEA_bc==2) # EAcase
+    idx2=which(sampletable_$phenoBE_bc==2) #BEcase
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BEA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+    
+    idx1=which(sampletable_$phenoBE_bc==2 | sampletable_$phenoEA_bc==2) #BE or EAcase
+    idx2=which(sampletable_$phenoBE_bc==1 |sampletable_$phenoEA_bc==1) #Control
+    y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+    for (i in 1:length(selectedsnps))
+    {
+      x=as.numeric(bcagenotype_[which(rownames(bcagenotype_)==selectedsnps[i]),c(idx1,idx2)])
+      dat1=cbind.data.frame(y=y,x=x,sampletable_[c(idx1,idx2),c(6,7,23,24,25,26)],bca_gwasdat_[c(idx1,idx2),])
+      fm=glm(y~.,data=dat1,family=binomial)
+      #fm=glm(y~x+age+sex+site1+pc1+pc2+pc3,data=covariates,family=binomial) #including site
+      tmp=summary(fm)$coefficients
+      if ("x" %in% rownames(tmp))
+      {
+        res$BEEA_p[i]=summary(fm)$coefficients[2,4]
+      }
+    }
+  }
+  
+  return(res)
+}
+#correlation matrix with GWAS
+corr_selectedsnps_gwas=function(selectedsnps,bcagenotype,selectedsnps_gwasdist) #outcome ~SNP
+{
+  res=NA
+  if (class(selectedsnps_gwasdist)=="data.frame")
+  {
+    comsamples=intersect(sampletable$localid,colnames(bcagenotype))
+    idx=match(comsamples,colnames(bcagenotype))
+    bcagenotype_=bcagenotype[,idx]
+    idx=match(comsamples,rownames(bca_gwasdat))
+    bca_gwasdat_=bca_gwasdat[idx,]
+    idxgwas=which(colnames(bca_gwasdat) %in% selectedsnps_gwasdist$gwas)
+    bca_gwasdat_=bca_gwasdat_[,idxgwas,drop=F]
+    idx=match(selectedsnps,rownames(bcagenotype_))
+    if (sum(is.na(idx)>0))
+    {
+      tmp=sapply(selectedsnps,function(x){
+        tmp1=unlist(strsplit(x,"_"))
+        paste0(tmp1[c(1,3,2)],collapse = "_")
+      })
+      idx1=tmp %in% rownames(bcagenotype_)
+      selectedsnps[idx1]=tmp[idx1]
+      idx=match(selectedsnps,rownames(bcagenotype_))
+    }
+    res=cor(data.matrix(cbind(t(bcagenotype_[idx,]),bca_gwasdat_)))
+  }
+  return(res)
+}  
+
+skat_p=function(Z,X,idx1,idx2)
+{
+  y=c(rep(1,length(idx1)),rep(0,length(idx2)))
+  
+  Z1=Z[c(idx1,idx2),,drop=F]
+  X1=X[c(idx1,idx2),]
+  for (i in 1:ncol(X1)) X1[,i]=as.numeric(as.character(X1[,i]))
+  X1=as.matrix(X1)
+  tmp=rowSums(Z1)
+  if (sum(tmp!=0) !=1)
+  {
+    obj.s<-SKAT_Null_Model(y ~ X1,out_type="D")
+    #out<-SKAT(Z1, obj.s,weights.beta=c(1,25),r.corr=0) #0.04183234
+    #out<-SKAT(Z1, obj.s,weights.beta=c(1,1),r.corr=0) #1.207545e-05
+    #out=SKATBinary(Z1, obj.s, weights.beta=c(1,25),kernel = "linear.weighted",r.corr=0) #0.04183234
+    out=SKATBinary(Z1, obj.s, weights.beta=c(1,1),kernel = "linear.weighted",r.corr=0) #1.207545e-05
+    #out=SKATBinary(Z1, obj.s, method="SKATO", weights.beta=c(1,1),kernel = "linear.weighted") #4.244548e-05
+    #out<-SKATBinary(Z1, obj.s, weights.beta=c(1,25),kernel = "IBS.weighted",r.corr=0) #0.06059779
+    #out<-SKATBinary(Z1, obj.s, weights.beta=c(1,1),kernel = "2wayIX",r.corr=0) #5.994431e-05
+    #out<-SKAT_CommonRare(Z1, obj.s) #0.000466221
+    return(out$p.value)
+  }else
+  {
+    return(NA)
+  }
+}
+
+compute_p_arow=function(i,genemodel=res_min,bcagenotype,X)
+{
+  genes=rownames(genemodel)[genemodel$glmflag==1]
+  gene=genes[i]
+  res=data.frame(BE_p=NA,EA_p=NA,BEA_p=NA,BEEA_p=NA,stringsAsFactors = F)
+  rownames(res)=gene
+  selectedsnps=unlist(strsplit(genemodel$selectedsnps[which(rownames(genemodel)==gene)],"|",fixed=T))
+  idx=match(selectedsnps,rownames(bcagenotype))
+  idxtocorrect=which(is.na(idx))
+  
+  if (length(idxtocorrect)>0)
+  {
+    for (j in idxtocorrect)
+    {
+      tmp=unlist(strsplit(selectedsnps[j],"_"))
+      selectedsnps[j]=paste0(tmp[c(1,3,2)],collapse = "_")
+    }
+    idx=match(selectedsnps,rownames(bcagenotype))
+  }
+  
+  Z=t(bcagenotype[idx,,drop=F])
+  if (length(idxtocorrect)>0)
+  {
+    Z[idxtocorrect,]=2-Z[idxtocorrect,]
+  }
+  # tmp=colnames(bcagenotype)
+  # tmp=strsplit(tmp,"_")
+  # tmp1=sapply(1:length(tmp),function(x){
+  #   tmp1=tmp[[x]]
+  #   paste0(tmp1[2:length(tmp1)],collapse = "_")
+  # })
+  # colnames(bcagenotype)=tmp1
+  rownames(Z)=colnames(bcagenotype)
+  idx=match(allsamples,rownames(Z))
+  Z=Z[idx,,drop=F]
+  #print(rankMatrix(Z)[[1]])
+  idx1=which(sampletable$phenoBE_bc==2) #case
+  idx2=which(sampletable$phenoBE_bc==1)
+  res$BE_p=skat_p(Z,X,idx1,idx2)
+  idx1=which(sampletable$phenoEA_bc==2) #case
+  idx2=which(sampletable$phenoEA_bc==1)
+  res$EA_p=skat_p(Z,X,idx1,idx2)
+  idx1=which(sampletable$phenoBE_bc==2)
+  idx2=which(sampletable$phenoEA_bc==2)
+  res$BEA_p=skat_p(Z,X,idx1,idx2)
+  idx1=which(sampletable$phenoBE_bc==2 | sampletable$phenoEA_bc==2) #case
+  idx2=which(sampletable$phenoBE_bc==1)
+  res$BEEA_p=skat_p(Z,X,idx1,idx2)
+  return(res)
+}
+
+
+compute_p_arow_adjgwas=function(i,genemodel=genemodel1,bcagenotype=bcagenotype1,X,selectedsnps_gwasdist=selectedsnps1_gwasdist)
+{
+  res=NA
+  if (class(selectedsnps_gwasdist)=="data.frame")
+  {
+    comsamples=intersect(sampletable$localid,colnames(bcagenotype))
+    idx=match(comsamples,rownames(bca_gwasdat))
+    bca_gwasdat_=bca_gwasdat[idx,]
+    idxgwas=which(colnames(bca_gwasdat) %in% selectedsnps_gwasdist$gwas)
+    bca_gwasdat_=bca_gwasdat_[,idxgwas,drop=F]
+    res=compute_p_arow(i,genemodel,bcagenotype,X=cbind(X,bca_gwasdat_))
+  }
+  return(res)
+}
+
+#most genes came from outfolder="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_GTEx_PC4"
+check_genes_in3data=function(genes="DDX49",outfolders)
+{
+  outfolder1=outfolders[1]
+  outfolder2=outfolders[2]
+  outfolder3=outfolders[3]
+  genes=updategenenames(genes)
+  load(paste0(outfolder1,"/preidiction_michigan_model.RData"))
+  genemodel1=res_min
+  rownames(genemodel1)=updategenenames(rownames(genemodel1))
+  load(paste0(outfolder2,"/preidiction_michigan_model.RData"))
+  genemodel2=res_min
+  rownames(genemodel2)=updategenenames(rownames(genemodel2))
+  load(paste0(outfolder3,"/preidiction_michigan_model.RData"))
+  genemodel3=res_min
+  rownames(genemodel3)=updategenenames(rownames(genemodel3))
+  
+  load("../result/TCGAdatafor_prediction_michigan.RData")
+  phenotype1=phenotype
+  phenotypepos1=phenotypepos
+  rownames(phenotype1)=updategenenames(rownames(phenotype1))
+  rownames(phenotypepos1)=updategenenames(rownames(phenotypepos1))
+  snp1=snp
+  snppos1=snppos
+  copynumber1=copynumber
+  mutation1=mutation
+  covariate1=covariate
+  load(paste0(outfolder1,"/bca_extractgenotype.RData"))
+  bcagenotype1=bcagenotype
+  colnames(bcagenotype1)=update_bcasamplenames(colnames(bcagenotype1))
+  
+  load("../result/GTExjunctiondatafor_prediction.RData")
+  phenotype2=phenotype[phenotypepos$geneid %in% proteingenes,]
+  phenotypepos2=phenotypepos[phenotypepos$geneid %in% proteingenes,]
+  rownames(phenotype2)=updategenenames(rownames(phenotype2))
+  rownames(phenotypepos2)=updategenenames(rownames(phenotypepos2))
+  snp2=snp
+  snppos2=snppos
+  covariate2=covariate
+  load(paste0(outfolder2,"/bca_extractgenotype.RData"))
+  bcagenotype2=bcagenotype
+  colnames(bcagenotype2)=update_bcasamplenames(colnames(bcagenotype2))
+  
+  load("../result/GTExmucosadatafor_prediction.RData")
+  phenotype3=phenotype[phenotypepos$geneid %in% proteingenes,]
+  phenotypepos3=phenotypepos[phenotypepos$geneid %in% proteingenes,]
+  rownames(phenotype3)=updategenenames(rownames(phenotype3))
+  rownames(phenotypepos3)=updategenenames(rownames(phenotypepos3))
+  snp3=snp
+  snppos3=snppos
+  covariate3=covariate
+  load(paste0(outfolder3,"/bca_extractgenotype.RData"))
+  bcagenotype3=bcagenotype
+  colnames(bcagenotype3)=update_bcasamplenames(colnames(bcagenotype3))
+  
+  load("../result/Dong23SNPs.RData")
+  gr_gwas=GRanges(seqnames = dong23snp$Chr,ranges=IRanges(start=dong23snp$Position,width = 1))
+  allres=vector("list",length(genes))
+  names(allres)=genes
+  for (i in 1:length(genes))
+  {
+    #cat(i,"..")
+    gene=genes[i]
+    print(gene)
+    #selectedsnps1=selectedsnps2=selectedsnps3=selectedsnps1_gwasdist=selectedsnps2_gwasdist=selectedsnps1_eqtl1=selectedsnps1_eqtl2=selectedsnps2_eqtl1=selectedsnps2_eqtl2=assoc_selectedsnps1=assoc_selectedsnps2=assoc_selectedsnps1_adjgwas=assoc_selectedsnps2_adjgwas=corr_selectedsnps1_gwas=corr_selectedsnps2_gwas=skat_p1_adjgwas=skat_p2_adjgwas=NA
+    selectedsnps1=selectedsnps2=selectedsnps3=selectedsnps1_gwasdist=selectedsnps2_gwasdist=selectedsnps3_gwasdist=selectedsnps1_eqtl1=selectedsnps1_eqtl2=selectedsnps1_eqtl3=selectedsnps2_eqtl1=selectedsnps2_eqtl2=selectedsnps2_eqtl3=selectedsnps3_eqtl1=selectedsnps3_eqtl2=selectedsnps3_eqtl3=assoc_selectedsnps1=assoc_selectedsnps2=assoc_selectedsnps3=assoc_selectedsnps1_adjgwas=assoc_selectedsnps2_adjgwas=assoc_selectedsnps3_adjgwas=corr_selectedsnps1_gwas=corr_selectedsnps2_gwas=corr_selectedsnps3_gwas=skat_p1_adjgwas=skat_p2_adjgwas=skat_p3_adjgwas=NA
+    
+    idx1=which(rownames(genemodel1)==gene)
+    if (length(idx1)>0)
+    {
+      if (genemodel1$glmflag[idx1]==T)
+      {
+        selectedsnps1=unlist(strsplit(genemodel1$selectedsnps[idx1],"|",fixed=T))
+        selectedsnps1_pos=sapply(selectedsnps1,function(x){
+          tmp=unlist(strsplit(x,"_"))
+          as.integer(unlist(strsplit(tmp,":"))[2])
+        })
+        chr=unlist(strsplit(unlist(strsplit(selectedsnps1[1],"_")),":"))[1]
+        gr_selectedsnps1=GRanges(seqnames = chr,ranges = IRanges(start=selectedsnps1_pos,width =1))
+        tmp=distanceToNearest(gr_selectedsnps1,gr_gwas)
+        selectedsnps1_gwasdist=data.frame(snp=selectedsnps1,gwas=NA,distance=NA,stringsAsFactors = F)
+        idx3=match(tmp@from,1:length(selectedsnps1))
+        selectedsnps1_gwasdist$gwas[idx3]=dong23snp$SNP[tmp@to]
+        selectedsnps1_gwasdist$distance[idx3]=tmp@elementMetadata$distance
+        if (all(selectedsnps1_gwasdist$distance!=0)) #make sure no gwas snps selected
+        {
+          skat_p1_adjgwas=compute_p_arow_adjgwas(i=which(rownames(genemodel1)[genemodel1$glmflag==1]==gene),genemodel = genemodel1,bcagenotype = bcagenotype1,X,selectedsnps_gwasdist=selectedsnps1_gwasdist)
+          #print(skat_p2_adjgwas)
+          #print(skat_min2[which(rownames(skat_min2)==gene),])
+        }
+        
+        selectedsnps1_eqtl2=computeeQTL1(selectedsnps = selectedsnps1,snp=snp2,phenotype=phenotype2,covariate = covariate2,gene=gene) #in GTEx data
+        selectedsnps1_eqtl1=computeeQTL2(selectedsnps = selectedsnps1,snp=snp1,phenotype=phenotype1,copynumber = copynumber1,mutation=mutation1,covariate = covariate1, gene=gene) #in TCGA data
+        selectedsnps1_eqtl3=computeeQTL1(selectedsnps = selectedsnps1,snp=snp3,phenotype=phenotype3,covariate = covariate3,gene=gene) 
+        assoc_selectedsnps1=pvalue_assoc_selectedsnps(selectedsnps = selectedsnps1,bcagenotype = bcagenotype1)
+        assoc_selectedsnps1_adjgwas=pvalue_assoc_selectedsnps_adjgwas(selectedsnps = selectedsnps1,bcagenotype = bcagenotype1,selectedsnps_gwasdist=selectedsnps1_gwasdist)
+        corr_selectedsnps1_gwas=corr_selectedsnps_gwas(selectedsnps = selectedsnps1,bcagenotype = bcagenotype1,selectedsnps_gwasdist=selectedsnps1_gwasdist)
+        
+      }
+    }
+    print(2)
+    idx2=which(rownames(genemodel2)==gene)
+    if (length(idx2)>0)
+    {
+      if (genemodel2$glmflag[idx2]==T)
+      {
+        selectedsnps2=unlist(strsplit(genemodel2$selectedsnps[idx2],"|",fixed=T))
+        selectedsnps2_pos=sapply(selectedsnps2,function(x){
+          tmp=unlist(strsplit(x,"_"))
+          as.integer(unlist(strsplit(tmp,":"))[2])
+        })
+        chr=unlist(strsplit(unlist(strsplit(selectedsnps2[1],"_")),":"))[1]
+        gr_selectedsnps2=GRanges(seqnames = chr,ranges = IRanges(start=selectedsnps2_pos,width =1))
+        tmp=distanceToNearest(gr_selectedsnps2,gr_gwas)
+        selectedsnps2_gwasdist=data.frame(snp=selectedsnps2,gwas=NA,distance=NA,stringsAsFactors = F)
+        idx3=match(tmp@from,1:length(selectedsnps2))
+        selectedsnps2_gwasdist$gwas[idx3]=dong23snp$SNP[tmp@to]
+        selectedsnps2_gwasdist$distance[idx3]=tmp@elementMetadata$distance
+        skat_p2_adjgwas=compute_p_arow_adjgwas(i=which(rownames(genemodel2)[genemodel2$glmflag==1]==gene),genemodel = genemodel2,bcagenotype = bcagenotype2,X,selectedsnps_gwasdist=selectedsnps2_gwasdist)
+        #print(skat_p1_adjgwas)
+        #print(skat_min1[which(rownames(skat_min1)==gene),])
+        selectedsnps2_eqtl1=computeeQTL2(selectedsnps = selectedsnps2,snp=snp1,phenotype=phenotype1,copynumber = copynumber1,mutation=mutation1,covariate = covariate1, gene=gene) #in TCGA data
+        selectedsnps2_eqtl2=computeeQTL1(selectedsnps = selectedsnps2,snp=snp2,phenotype=phenotype2,covariate = covariate2,gene=gene) #in GTEx data
+        selectedsnps2_eqtl3=computeeQTL1(selectedsnps = selectedsnps2,snp=snp3,phenotype=phenotype3,covariate = covariate3,gene=gene) #in GTEx data
+        
+        assoc_selectedsnps2=pvalue_assoc_selectedsnps(selectedsnps = selectedsnps2,bcagenotype = bcagenotype2)
+        assoc_selectedsnps2_adjgwas=pvalue_assoc_selectedsnps_adjgwas(selectedsnps = selectedsnps2,bcagenotype = bcagenotype2,selectedsnps_gwasdist=selectedsnps2_gwasdist)
+        corr_selectedsnps2_gwas=corr_selectedsnps_gwas(selectedsnps = selectedsnps2,bcagenotype = bcagenotype2,selectedsnps_gwasdist=selectedsnps2_gwasdist)
+        
+      }
+    }
+    print(3)
+    idx3=which(rownames(genemodel3)==gene)
+    if (length(idx3)>0)
+    {
+      if (genemodel3$glmflag[idx3]==T)
+      {
+        selectedsnps3=unlist(strsplit(genemodel3$selectedsnps[idx3],"|",fixed=T))
+        selectedsnps3_pos=sapply(selectedsnps3,function(x){
+          tmp=unlist(strsplit(x,"_"))
+          as.integer(unlist(strsplit(tmp,":"))[2])
+        })
+        chr=unlist(strsplit(unlist(strsplit(selectedsnps3[1],"_")),":"))[1]
+        gr_selectedsnps3=GRanges(seqnames = chr,ranges = IRanges(start=selectedsnps3_pos,width =1))
+        tmp=distanceToNearest(gr_selectedsnps3,gr_gwas)
+        selectedsnps3_gwasdist=data.frame(snp=selectedsnps3,gwas=NA,distance=NA,stringsAsFactors = F)
+        idx4=match(tmp@from,1:length(selectedsnps3))
+        selectedsnps3_gwasdist$gwas[idx4]=dong23snp$SNP[tmp@to]
+        selectedsnps3_gwasdist$distance[idx4]=tmp@elementMetadata$distance
+        skat_p3_adjgwas=compute_p_arow_adjgwas(i=which(rownames(genemodel3)[genemodel3$glmflag==1]==gene),genemodel = genemodel3,bcagenotype = bcagenotype3,X,selectedsnps_gwasdist=selectedsnps3_gwasdist)
+        #print(skat_p1_adjgwas)
+        #print(skat_min1[which(rownames(skat_min1)==gene),])
+        selectedsnps3_eqtl1=computeeQTL2(selectedsnps = selectedsnps3,snp=snp1,phenotype=phenotype1,copynumber = copynumber1,mutation=mutation1,covariate = covariate1, gene=gene) #in TCGA data
+        selectedsnps3_eqtl2=computeeQTL1(selectedsnps = selectedsnps3,snp=snp2,phenotype=phenotype2,covariate = covariate2,gene=gene) #in GTEx data
+        selectedsnps3_eqtl3=computeeQTL1(selectedsnps = selectedsnps3,snp=snp3,phenotype=phenotype3,covariate = covariate3,gene=gene) #in GTEx data
+        
+        assoc_selectedsnps3=pvalue_assoc_selectedsnps(selectedsnps = selectedsnps3,bcagenotype = bcagenotype3)
+        assoc_selectedsnps3_adjgwas=pvalue_assoc_selectedsnps_adjgwas(selectedsnps = selectedsnps3,bcagenotype = bcagenotype3,selectedsnps_gwasdist=selectedsnps3_gwasdist)
+        corr_selectedsnps3_gwas=corr_selectedsnps_gwas(selectedsnps = selectedsnps3,bcagenotype = bcagenotype3,selectedsnps_gwasdist=selectedsnps3_gwasdist)
+        
+      }
+    }
+    
+    selectsnps_com=intersect(intersect(selectedsnps1,selectedsnps2),selectedsnps3)
+    if (length(selectsnps_com)==0) selectsnps_com=NA
+    res=list(gene=gene,selectedsnps1=selectedsnps1,selectedsnps2=selectedsnps2,selectedsnps3=selectedsnps3,selectedsnps1_gwasdist=selectedsnps1_gwasdist,selectedsnps2_gwasdist=selectedsnps2_gwasdist,selectedsnps3_gwasdist=selectedsnps3_gwasdist,
+             selectedsnps1_eqtl1=selectedsnps1_eqtl1,selectedsnps1_eqtl2=selectedsnps1_eqtl2,selectedsnps1_eqtl3=selectedsnps1_eqtl3,selectedsnps2_eqtl1=selectedsnps2_eqtl1,selectedsnps2_eqtl2=selectedsnps2_eqtl2,selectedsnps2_eqtl3=selectedsnps2_eqtl3,
+             selectedsnps3_eqtl1=selectedsnps3_eqtl1,selectedsnps3_eqtl2=selectedsnps3_eqtl2,selectedsnps3_eqtl3=selectedsnps3_eqtl3,
+             assoc_selectedsnps1=assoc_selectedsnps1,assoc_selectedsnps2=assoc_selectedsnps2,assoc_selectedsnps3=assoc_selectedsnps3,assoc_selectedsnps1_adjgwas=assoc_selectedsnps1_adjgwas,assoc_selectedsnps2_adjgwas=assoc_selectedsnps2_adjgwas,assoc_selectedsnps3_adjgwas=assoc_selectedsnps3_adjgwas,
+             corr_selectedsnps1_gwas=corr_selectedsnps1_gwas,corr_selectedsnps2_gwas=corr_selectedsnps2_gwas,corr_selectedsnps3_gwas=corr_selectedsnps3_gwas,selectsnps_com=selectsnps_com,skat_p1_adjgwas=skat_p1_adjgwas,skat_p2_adjgwas=skat_p2_adjgwas,skat_p3_adjgwas=skat_p3_adjgwas)
+    allres[[i]]=res
+  }
+  return(allres)
+}
+
+genes=NULL #include fwer<0.05
+genesall=NULL #include fdr<0.05
+skat_min_code1=skat_min_code2=skat_min_code3=NA
+for (i in 1:length(outfolders))
+{
+  print(outfolders[i])
+  outfolder=outfolders[i]
+  load(paste0(outfolder,"/skat_res.RData"))
+  rownames(skat_min)=updategenenames(rownames(skat_min))
+  skat_min_code=skat_min[rownames(skat_min) %in% proteingenes,]
+  if (i==1) skat_min_code1=skat_min_code
+  if (i==2) skat_min_code2=skat_min_code
+  if (i==3) skat_min_code3=skat_min_code
+  tmp=compute_fwer_fdr()
+  genes=unique(c(genes,names(tmp$BEEA_fwer)))
+  genesall=unique(c(genes,names(tmp$BEEA_fdr)))
+}
+othergenes=genesall[!genesall %in% genes]
+check_genes_in3data_res=check_genes_in3data(genes = genes)
+check_fdrgenes_in3data_res=check_genes_in3data(genes = othergenes,outfolders = outfolders)
+save(check_genes_in3data_res,check_fdrgenes_in3data_res,file="../result/check_genes_in3data_res.RData")
+
+res1=data.frame(gene=othergenes,tcgasnps=NA,tcgar2=NA,tcgap=NA,junctionsnps=NA,junctionr2=NA,junctionp=NA,mucosasnps=NA,mucosar2=NA,mucosap=NA,stringsAsFactors = F)
+for (i in 1:nrow(res1))
+{
+  idx=which(rownames(genemodel1)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$tcgasnps[i]=genemodel1$numselectedsnp[idx]
+    res1$tcgar2[i]=genemodel1$r2[idx]
+  }
+  idx=which(rownames(skat_min_code1)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$tcgap[i]=skat_min_code1$BEEA_p[idx]
+  }
+  
+  idx=which(rownames(genemodel2)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$junctionsnps[i]=genemodel2$numselectedsnp[idx]
+    res1$junctionr2[i]=genemodel2$r2[idx]
+  }
+  idx=which(rownames(skat_min_code2)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$junctionp[i]=skat_min_code2$BEEA_p[idx]
+  }
+  
+  idx=which(rownames(genemodel3)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$mucosasnps[i]=genemodel3$numselectedsnp[idx]
+    res1$mucosar2[i]=genemodel3$r2[idx]
+  }
+  idx=which(rownames(skat_min_code3)==genes[i])
+  if (length(idx)>0)
+  {
+    res1$mucosap[i]=skat_min_code3$BEEA_p[idx]
+  }
+}
+
+checkres=check_genes_in3data_res
+#checkres=check_fdrgenes_in3data_res
+res2=data.frame(gene=othergenes,tcgap=res1$tcgap,tcgap_gwas=NA,junctionp=res1$junctionp,junctionp_gwas=NA,mucosap=res1$mucosap,mucosap_gwas=NA,stringsAsFactors = F)
+for (i in 1:nrow(res2))
+{
+  tmp=checkres[[i]]$skat_p1_adjgwas
+  if (class(tmp)=="data.frame")
+  {
+    res2$tcgap_gwas[i]=tmp$BEEA_p
+  }
+  tmp=checkres[[i]]$skat_p2_adjgwas
+  if (class(tmp)=="data.frame")
+  {
+    res2$junctionp_gwas[i]=tmp$BEEA_p
+  }
+  tmp=checkres[[i]]$skat_p3_adjgwas
+  if (class(tmp)=="data.frame")
+  {
+    res2$mucosap_gwas[i]=tmp$BEEA_p
+  }
+}
