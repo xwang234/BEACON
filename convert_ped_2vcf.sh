@@ -68,24 +68,66 @@ outfolder=/fh/fast/dai_j/BEACON/BEACON_GRANT/result/imputation_vcf
 
 #BEACON_dbgapcontrol_newID was generated in read_controls.R
 $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/BEACON_dbgapcontrol_newID --keep ../result/BEACON_dbgapcontrol_plinksamples.txt  -make-bed --out $outfolder/BEACON_dbgapcontrol
- for i in {1..22}
+
+#check missingness
+prefix=/fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/BEACON_dbgapcontrol_newID
+prefix1=BEACON_dbgapcontrol_newID
+checkmissing(){
+  local chr="$1"
+  echo $chr
+  $plink --bfile $prefix --chr $chr --missing --out $outfolder/${prefix1}_chr${chr}_missing --memory 2560
+}
+for chr in {1..22}
 do
-  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/BEACON_dbgapcontrol_newID  --chr $i  --keep ../result/BEACON_dbgapcontrol_plinksamples.txt  -make-bed --out $outfolder/BEACON_dbgapcontrol_chr$i 
+ checkmissing $chr &
+done
+
+#need to apply QC on each chr, or chr17 not imputed for beacon data (multiple chunk(s) excluded: at least one sample has a call rate < 50.0%)
+for i in {1..22}
+do
+  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/BEACON_dbgapcontrol_newID  --chr $i --mind 0.05 --geno 0.05 --hwe 0.000001 -make-bed --out $outfolder/BEACON_dbgapcontrol_chr$i 
+  $snpflip -b $outfolder/BEACON_dbgapcontrol_chr$i.bim -f $reference -o $outfolder/snpfilp_output
+  $plink --bfile $outfolder/BEACON_dbgapcontrol_chr$i --flip $outfolder/snpfilp_output.reverse -make-bed --out $outfolder/BEACON_dbgapcontrol_chr$i
+  $plink --bfile $outfolder/BEACON_dbgapcontrol_chr$i --recode vcf --out $outfolder/BEACON_dbgapcontrol_chr$i
+  $vcfsort $outfolder/BEACON_dbgapcontrol_chr$i.vcf |$bgzip -c >$outfolder/BEACON_dbgapcontrol_chr$i.vcf.gz
+done
+#number of samples are not same accross chr
+for i in {1..22}
+do
+  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/BEACON_dbgapcontrol_newID  --chr $i --mind 0.05 --geno 0.05 --hwe 0.000001 --keep ../result/BEACON_dbgapcontrol_QCplinksamples.txt -make-bed --out $outfolder/BEACON_dbgapcontrol_chr$i 
   $snpflip -b $outfolder/BEACON_dbgapcontrol_chr$i.bim -f $reference -o $outfolder/snpfilp_output
   $plink --bfile $outfolder/BEACON_dbgapcontrol_chr$i --flip $outfolder/snpfilp_output.reverse -make-bed --out $outfolder/BEACON_dbgapcontrol_chr$i
   $plink --bfile $outfolder/BEACON_dbgapcontrol_chr$i --recode vcf --out $outfolder/BEACON_dbgapcontrol_chr$i
   $vcfsort $outfolder/BEACON_dbgapcontrol_chr$i.vcf |$bgzip -c >$outfolder/BEACON_dbgapcontrol_chr$i.vcf.gz
 done
 
-$plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/Cambridge_WTCCC_newID --mind 0.05 --geno 0.05 --hwe 0.000001 --keep ../result/WTCCC_plinksamples.txt  -make-bed --out $outfolder/WTCCC_control
+
+$plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/Cambridge_WTCCC_newID --keep ../result/Cambridge_WTCCC_plinksamples.txt  -make-bed --out $outfolder/Cambridge_WTCCC
+prefix=$outfolder/Cambridge_WTCCC
+prefix1=Cambridge_WTCCC
+for chr in {1..22}
+do
+ checkmissing $chr &
+done
+
 for i in {1..22}
 do
-  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/Cambridge_WTCCC_newID  --chr $i  --mind 0.05 --geno 0.05 --hwe 0.000001 --keep ../result/WTCCC_plinksamples.txt  -make-bed --out $outfolder/WTCCC_control_chr$i 
-  $snpflip -b $outfolder/WTCCC_control_chr$i.bim -f $reference -o $outfolder/snpfilp_output
-  $plink --bfile $outfolder/WTCCC_control_chr$i --flip $outfolder/snpfilp_output.reverse -make-bed --out $outfolder/WTCCC_control_chr$i
-  $plink --bfile $outfolder/WTCCC_control_chr$i --recode vcf --out $outfolder/WTCCC_control_chr$i
-  $vcfsort $outfolder/WTCCC_control_chr$i.vcf |$bgzip -c >$outfolder/WTCCC_control_chr$i.vcf.gz
+  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/Cambridge_WTCCC_newID  --chr $i --mind 0.05 --geno 0.05 --hwe 0.000001 --keep ../result/Cambridge_WTCCC_plinksamples.txt  -make-bed --out $outfolder/Cambridge_WTCCCcontrol_chr$i 
+  $snpflip -b $outfolder/Cambridge_WTCCCcontrol_chr$i.bim -f $reference -o $outfolder/snpfilp_output
+  $plink --bfile $outfolder/Cambridge_WTCCCcontrol_chr$i --flip $outfolder/snpfilp_output.reverse -make-bed --out $outfolder/Cambridge_WTCCCcontrol_chr$i
+  $plink --bfile $outfolder/Cambridge_WTCCCcontrol_chr$i --recode vcf --out $outfolder/Cambridge_WTCCCcontrol_chr$i
+  $vcfsort $outfolder/Cambridge_WTCCCcontrol_chr$i.vcf |$bgzip -c >$outfolder/Cambridge_WTCCCcontrol_chr$i.vcf.gz
+done
+for i in {1..22}
+do
+  $plink --bfile /fh/fast/dai_j/BEACON/BEACON_GRANT/data/AdditionalControlPuya/Cambridge_WTCCC_newID  --chr $i --mind 0.05 --geno 0.05 --hwe 0.000001 --keep ../result/Cambridge_WTCCC_QCplinksamples.txt  -make-bed --out $outfolder/Cambridge_WTCCCcontrol_chr$i 
+  $snpflip -b $outfolder/Cambridge_WTCCCcontrol_chr$i.bim -f $reference -o $outfolder/snpfilp_output
+  $plink --bfile $outfolder/Cambridge_WTCCCcontrol_chr$i --flip $outfolder/snpfilp_output.reverse -make-bed --out $outfolder/Cambridge_WTCCCcontrol_chr$i
+  $plink --bfile $outfolder/Cambridge_WTCCCcontrol_chr$i --recode vcf --out $outfolder/Cambridge_WTCCCcontrol_chr$i
+  $vcfsort $outfolder/Cambridge_WTCCCcontrol_chr$i.vcf |$bgzip -c >$outfolder/Cambridge_WTCCCcontrol_chr$i.vcf.gz
 done
 
 #after download results, they are unziped using data/imputation/unzip_imputationres.sh
 
+#add missing gwas snps "rs9918259"  "rs75783973" in chr5, 1000genome phase1
+#submit BEACON_dbgapcontrol_chr5.vcf.gz, Cambridge_WTCCCcontrol_chr5.vcf.gz to michigan server again (Chr5_Beacon_phase1,Chr5_Cambridge_phase1)

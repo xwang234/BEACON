@@ -28,7 +28,9 @@ extract_vcf2(){
   tabixreg=$outfolder/prediction_snps_tabix_chr${chr}_2.txt
   #tabix -H /fh/fast/dai_j/BEACON/BEACON_GRANT/data/imputation/bca_1000g/chr${chr}_filter_noambiguous_hg19tohg38_flip.vcf.gz >$outfolder/chr${chr}.select.dose.vcf
   #xargs -a $tabixreg -I {} echo {} |more
-  xargs -a $tabixreg -I {} tabix -f /fh/fast/dai_j/BEACON/BEACON_GRANT/data/imputation/bca_1000g/chr${chr}_filter_noambiguous_hg19tohg38_flip.vcf.gz {} >> $outfolder/chr${chr}_2.select.dose.vcf
+  #xargs -a $tabixreg -I {} tabix -f /fh/fast/dai_j/BEACON/BEACON_GRANT/data/imputation/bca_1000g/chr${chr}_filter_noambiguous_hg19tohg38_flip.vcf.gz {} >> $outfolder/chr${chr}_2.select.dose.vcf
+  xargs -a $tabixreg -I {} tabix -f /fh/fast/dai_j/BEACON/BEACON_GRANT/data/imputation/bca_1000g/chr${chr}_filter_hg19tohg38_flip.vcf.gz {} >> $outfolder/chr${chr}_2.select.dose.vcf
+
 }
 
 plink_geno(){

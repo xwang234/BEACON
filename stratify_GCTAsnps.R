@@ -6,13 +6,29 @@ library(data.table)
 #stratify the SNPs by LD scores of individual SNPs in R
 #https://cnsgenomics.com/software/gcta/#GREMLinWGSorimputeddata
 lds_seg = as.data.frame(fread(paste0(prefix,".score.ld"),header=T))
-if (sum(colnames(lds_seg)=="ldscore_region")==0) lds_seg$ldscore_region=lds_seg$ldscore
-quartiles=summary(lds_seg$ldscore_region)
+opt="region"
+if (opt=="region")
+{
+  if (sum(colnames(lds_seg)=="ldscore_region")==0) lds_seg$ldscore_region=lds_seg$ldscore
+  quartiles=summary(lds_seg$ldscore_region)
 
-lb1 = which(lds_seg$ldscore_region <= quartiles[2])
-lb2 = which(lds_seg$ldscore_region > quartiles[2] & lds_seg$ldscore_region <= quartiles[3])
-lb3 = which(lds_seg$ldscore_region > quartiles[3] & lds_seg$ldscore_region <= quartiles[5])
-lb4 = which(lds_seg$ldscore_region > quartiles[5])
+  lb1 = which(lds_seg$ldscore_region <= quartiles[2])
+  lb2 = which(lds_seg$ldscore_region > quartiles[2] & lds_seg$ldscore_region <= quartiles[3])
+  lb3 = which(lds_seg$ldscore_region > quartiles[3] & lds_seg$ldscore_region <= quartiles[5])
+  lb4 = which(lds_seg$ldscore_region > quartiles[5])
+}
+
+if (opt=="individual")
+{
+  quartiles=summary(lds_seg$ldscore_SNP)
+  
+  lb1 = which(lds_seg$ldscore_SNP <= quartiles[2])
+  lb2 = which(lds_seg$ldscore_SNP > quartiles[2] & lds_seg$ldscore_SNP <= quartiles[3])
+  lb3 = which(lds_seg$ldscore_SNP > quartiles[3] & lds_seg$ldscore_SNP <= quartiles[5])
+  lb4 = which(lds_seg$ldscore_SNP > quartiles[5])
+}
+
+
 
 lb1_snp = data.frame(snp=lds_seg$SNP[lb1])
 lb2_snp = data.frame(snp=lds_seg$SNP[lb2])

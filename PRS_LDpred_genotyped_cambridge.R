@@ -326,121 +326,121 @@ generate_covariate(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Validation_
 p.threshold <- c(1,0.3,0.1)
 p.threshold <- c(1,0.3,0.1,0.03,0.01,0.003,0.001,0.0003,0.0001)
 # Read in the covariates
-# read_LDpred=function(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BEEA_genotyped")
-# {
-#   # Read in the phenotype file 
-#   phenotype <- read.table(paste0(prefix,".pheno"), header=F)
-#   colnames(phenotype)=c("FID","IID","case")
+read_LDpred=function(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BEEA_genotyped")
+{
+  # Read in the phenotype file
+  phenotype <- read.table(paste0(prefix,".pheno"), header=F)
+  colnames(phenotype)=c("FID","IID","case")
+
+
+  covariate <- read.table(paste0(prefix,".covariate"), header=T,stringsAsFactors = F)
+  # Now merge the files
+  pheno <- merge(phenotype, covariate, by=c("IID"))
+  # We can then calculate the null model (model with PRS) using a linear regression
+  pheno$case=as.numeric(I(pheno$case==2))
+  null.model <- glm(case~., data=pheno[,!colnames(pheno)%in%c("FID","IID")],family = "binomial")
+  null.model1 <- glm(case~1, data=pheno[,!colnames(pheno)%in%c("FID","IID")],family = "binomial")
+  # And the R2 of the null model is
+  null.r2 <- 1-logLik(null.model)/logLik(null.model1)
+  prs.result <- NULL
+  for(i in p.threshold){
+    # Go through each p-value threshold .score_LDpred_p1.0000e-01.txt
+    tmp=formatC(i, format = "e", digits =4)
+    LDpredfile=paste0(prefix,".score_LDpred_p",tmp,".txt")
+    if (file.exists(LDpredfile))
+    {
+      #prs <- read.table(paste0(prefix,".score_LDpred_p",tmp,".txt"), header=T,sep=",")
+      prs <- read.table(paste0(prefix,".score_LDpred_p",tmp,".txt.adj"), header=T,sep=",")
+      # Merge the prs with the phenotype matrix
+      # We only want the FID, IID and PRS from the PRS file, therefore we only select the
+      # relevant columns
+      pheno.prs <- merge(pheno, prs, by=c("IID"))
+      # Now perform a linear regression on Height with PRS and the covariates
+      # ignoring the FID and IID from our model
+
+      model <- glm(case~., data=pheno.prs[,!colnames(pheno.prs)%in%c("FID","IID","true_phens","cov_prs")],family = "binomial")
+      model1 <- glm(case~1, data=pheno.prs[,!colnames(pheno.prs)%in%c("FID","IID","true_phens","cov_prs")],family = "binomial")
+      # model R2 is obtained as
+      model.r2 <- 1-logLik(model)/logLik(model1)
+      # R2 of PRS is simply calculated as the model R2 minus the null R2
+      prs.r2 <- model.r2-null.r2
+      #prs.r2=1-logLik(model)/logLik(null.model)
+      # We can also obtain the coeffcient and p-value of association of PRS as follow
+      prs.coef <- summary(model)$coeff["PRS",]
+      #prs.coef <- summary(model)$coeff["cov_prs",]
+      prs.beta <- as.numeric(prs.coef[1])
+      prs.se <- as.numeric(prs.coef[2])
+      prs.p <- as.numeric(prs.coef[4])
+      # We can then store the results
+      prs.result <- rbind(prs.result, data.frame(Threshold=i, R2=prs.r2, P=prs.p, BETA=prs.beta,SE=prs.se))
+    }
+  }
+  # Best result is:
+  prs.result[which.max(prs.result$R2),]
+  return(prs.result)
+}
 #   
-#   
-#   covariate <- read.table(paste0(prefix,".covariate"), header=T,stringsAsFactors = F)
-#   # Now merge the files
-#   pheno <- merge(phenotype, covariate, by=c("IID"))
-#   # We can then calculate the null model (model with PRS) using a linear regression 
-#   
-#   null.model <- glm(case~., data=pheno[,!colnames(pheno)%in%c("FID","IID")],family = "binomial")
-#   null.model1 <- glm(case~1, data=pheno[,!colnames(pheno)%in%c("FID","IID")],family = "binomial")
-#   # And the R2 of the null model is 
-#   null.r2 <- 1-logLik(null.model)/logLik(null.model1)
-#   prs.result <- NULL
-#   for(i in p.threshold){
-#     # Go through each p-value threshold .score_LDpred_p1.0000e-01.txt
-#     tmp=formatC(i, format = "e", digits =4)
-#     LDpredfile=paste0(prefix,".score_LDpred_p",tmp,".txt")
-#     if (file.exists(LDpredfile))
-#     {
-#       #prs <- read.table(paste0(prefix,".score_LDpred_p",tmp,".txt"), header=T,sep=",")
-#       prs <- read.table(paste0(prefix,".score_LDpred_p",tmp,".txt.adj"), header=T,sep=",")
-#       # Merge the prs with the phenotype matrix
-#       # We only want the FID, IID and PRS from the PRS file, therefore we only select the 
-#       # relevant columns
-#       pheno.prs <- merge(pheno, prs, by=c("IID"))
-#       # Now perform a linear regression on Height with PRS and the covariates
-#       # ignoring the FID and IID from our model
-#       
-#       model <- glm(case~., data=pheno.prs[,!colnames(pheno.prs)%in%c("FID","IID","true_phens","cov_prs")],family = "binomial")
-#       model1 <- glm(case~1, data=pheno.prs[,!colnames(pheno.prs)%in%c("FID","IID","true_phens","cov_prs")],family = "binomial")
-#       # model R2 is obtained as 
-#       model.r2 <- 1-logLik(model)/logLik(model1)
-#       # R2 of PRS is simply calculated as the model R2 minus the null R2
-#       prs.r2 <- model.r2-null.r2
-#       #prs.r2=1-logLik(model)/logLik(null.model)
-#       # We can also obtain the coeffcient and p-value of association of PRS as follow
-#       prs.coef <- summary(model)$coeff["PRS",]
-#       #prs.coef <- summary(model)$coeff["cov_prs",]
-#       prs.beta <- as.numeric(prs.coef[1])
-#       prs.se <- as.numeric(prs.coef[2])
-#       prs.p <- as.numeric(prs.coef[4])
-#       # We can then store the results
-#       prs.result <- rbind(prs.result, data.frame(Threshold=i, R2=prs.r2, P=prs.p, BETA=prs.beta,SE=prs.se))
-#     }
-#   }
-#   # Best result is:
-#   prs.result[which.max(prs.result$R2),]
-#   return(prs.result)
-# }
-  
-# plot_LDpred=function(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BEEA_genotyped")
-# {
-#   prs.result=read_LDpred(prefix=prefix)
-#   #pdf(paste0(prefix,".LDpred.pdf"),width=12,height=8)
-#   png(paste0(prefix,".LDpred.png"), height=10, width=10, res=300, unit="in")
-#   # First, obtain the colorings based on the p-value
-#   col <- suppressWarnings(colorRampPalette(c("dodgerblue", "firebrick")))
-#   # We want the color gradient to match the ranking of p-values
-#   prs.result <- prs.result[order(-log10(prs.result$P)),]
-#   prs.result$color <-  col(nrow(prs.result))
-#   prs.result <- prs.result[order(prs.result$Threshold),]
-#   # generate a pretty format for p-value output
-#   prs.result$print.p <- round(prs.result$P, digits = 3)
-#   prs.result$print.p[!is.na(prs.result$print.p) & prs.result$print.p == 0 ] <-
-#     format(prs.result$P[!is.na(prs.result$print.p) & prs.result$print.p == 0 ], digits = 2)
-#   prs.result$print.p <- sub("e", "*x*10^", prs.result$print.p)
-#   # Generate the axis labels
-#   xlab <- expression(italic(P) - value ~ threshold ~ (italic(P)[T]))
-#   ylab <- expression(paste("PRS model fit:  ", R ^ 2))
-#   # Setup the drawing area
-#   layout(t(1:2), widths=c(8.8,1.2))
-#   par( cex.lab=1.5, cex.axis=1.25, font.lab=2, 
-#        oma=c(0,0.5,0,0),
-#        mar=c(4,6,0.5,0.5))
-#   # Plotting the bars
-#   b<- barplot(height=prs.result$R2, 
-#               col=prs.result$color, 
-#               border=NA, 
-#               ylim=c(0, max(prs.result$R2)*1.25), 
-#               axes = F, ann=F)
-#   # Plot the axis labels and axis ticks
-#   odd <- seq(0,nrow(prs.result)+1,2)
-#   even <- seq(1,nrow(prs.result),2)
-#   axis(side=1, at=b[odd], labels=prs.result$Threshold[odd], lwd=2)
-#   axis(side=1, at=b[even], labels=prs.result$Threshold[even],lwd=2)
-#   axis(side=1, at=c(0,b[1],2*b[length(b)]-b[length(b)-1]), labels=c("","",""), lwd=2, lwd.tick=0)
-#   # Write the p-value on top of each bar
-#   text( parse(text=paste(
-#     prs.result$print.p)), 
-#     x = b+0.1, 
-#     y =  prs.result$R2+ (max(prs.result$R2)*1.05-max(prs.result$R2)), 
-#     srt = 45)
-#   # Now plot the axis lines
-#   box(bty='L', lwd=2)
-#   axis(2,las=2, lwd=2)
-#   # Plot the axis titles
-#   title(ylab=ylab, line=4, cex.lab=1.5, font=2 )
-#   title(xlab=xlab, line=2.5, cex.lab=1.5, font=2 )
-#   # Generate plot area for the legend
-#   par(cex.lab=1.5, cex.axis=1.25, font.lab=2, 
-#       mar=c(20,0,20,4))
-#   prs.result <- prs.result[order(-log10(prs.result$P)),]
-#   image(1, -log10(prs.result$P), t(seq_along(-log10(prs.result$P))), col=prs.result$color, axes=F,ann=F)
-#   axis(4,las=2,xaxs='r',yaxs='r', tck=0.2, col="white")
-#   # plot legend title
-#   title(bquote(atop(-log[10] ~ model, italic(P) - value), ), 
-#         line=2, cex=1.5, font=2, adj=0)
-#   dev.off()
-#   return(prs.result)
-# }
-# 
+plot_LDpred=function(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BEEA_genotyped")
+{
+  prs.result=read_LDpred(prefix=prefix)
+  #pdf(paste0(prefix,".LDpred.pdf"),width=12,height=8)
+  png(paste0(prefix,".LDpred.png"), height=10, width=10, res=300, unit="in")
+  # First, obtain the colorings based on the p-value
+  col <- suppressWarnings(colorRampPalette(c("dodgerblue", "firebrick")))
+  # We want the color gradient to match the ranking of p-values
+  prs.result <- prs.result[order(-log10(prs.result$P)),]
+  prs.result$color <-  col(nrow(prs.result))
+  prs.result <- prs.result[order(prs.result$Threshold),]
+  # generate a pretty format for p-value output
+  prs.result$print.p <- round(prs.result$P, digits = 3)
+  prs.result$print.p[!is.na(prs.result$print.p) & prs.result$print.p == 0 ] <-
+    format(prs.result$P[!is.na(prs.result$print.p) & prs.result$print.p == 0 ], digits = 2)
+  prs.result$print.p <- sub("e", "*x*10^", prs.result$print.p)
+  # Generate the axis labels
+  xlab <- expression(italic(P) - value ~ threshold ~ (italic(P)[T]))
+  ylab <- expression(paste("PRS model fit:  ", R ^ 2))
+  # Setup the drawing area
+  layout(t(1:2), widths=c(8.8,1.2))
+  par( cex.lab=1.5, cex.axis=1.25, font.lab=2,
+       oma=c(0,0.5,0,0),
+       mar=c(4,6,0.5,0.5))
+  # Plotting the bars
+  b<- barplot(height=prs.result$R2,
+              col=prs.result$color,
+              border=NA,
+              ylim=c(0, max(prs.result$R2)*1.25),
+              axes = F, ann=F)
+  # Plot the axis labels and axis ticks
+  odd <- seq(0,nrow(prs.result)+1,2)
+  even <- seq(1,nrow(prs.result),2)
+  axis(side=1, at=b[odd], labels=prs.result$Threshold[odd], lwd=2)
+  axis(side=1, at=b[even], labels=prs.result$Threshold[even],lwd=2)
+  axis(side=1, at=c(0,b[1],2*b[length(b)]-b[length(b)-1]), labels=c("","",""), lwd=2, lwd.tick=0)
+  # Write the p-value on top of each bar
+  text( parse(text=paste(
+    prs.result$print.p)),
+    x = b+0.1,
+    y =  prs.result$R2+ (max(prs.result$R2)*1.05-max(prs.result$R2)),
+    srt = 45)
+  # Now plot the axis lines
+  box(bty='L', lwd=2)
+  axis(2,las=2, lwd=2)
+  # Plot the axis titles
+  title(ylab=ylab, line=4, cex.lab=1.5, font=2 )
+  title(xlab=xlab, line=2.5, cex.lab=1.5, font=2 )
+  # Generate plot area for the legend
+  par(cex.lab=1.5, cex.axis=1.25, font.lab=2,
+      mar=c(20,0,20,4))
+  prs.result <- prs.result[order(-log10(prs.result$P)),]
+  image(1, -log10(prs.result$P), t(seq_along(-log10(prs.result$P))), col=prs.result$color, axes=F,ann=F)
+  axis(4,las=2,xaxs='r',yaxs='r', tck=0.2, col="white")
+  # plot legend title
+  title(bquote(atop(-log[10] ~ model, italic(P) - value), ),
+        line=2, cex=1.5, font=2, adj=0)
+  dev.off()
+  return(prs.result)
+}
+# # 
 # BE_LDpred=plot_LDpred(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BE_genotyped")
 # BEEA_LDpred=plot_LDpred(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_BEEA_genotyped")
 # EA_LDpred=plot_LDpred(prefix="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_EA_genotyped")

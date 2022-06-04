@@ -86,6 +86,17 @@ EADiscovery_com=EADiscovery[idx,]
 write.table(EADiscovery_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Discovery_genotyped_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
 write.table(EABonn_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Bonn_genotyped_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
 
+BEEADiscovery=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/GWAS/Discovery_genotyped_BEEA_CO_gwas.assoc.logistic",fill=T))
+BEEABonn=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_autosomes_N.txt"))
+comsnp=intersect(BEEABonn$SNP,BEEADiscovery$SNP)
+idx=match(comsnp,BEEABonn$SNP)
+BEEABonn_com=BEEABonn[idx,]
+idx=match(comsnp,BEEADiscovery$SNP)
+BEEADiscovery_com=BEEADiscovery[idx,]
+write.table(BEEADiscovery_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Discovery_genotyped_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
+write.table(BEEABonn_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_genotyped_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
+
+
 #for Discovery imputped
 EADiscovery=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/GWAS/Discovery_EA_CO_gwas.assoc.logistic",fill=T))
 EABonn=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Bonn_autosomes_N.txt"))
@@ -97,6 +108,15 @@ EADiscovery_com=EADiscovery[idx,]
 write.table(EADiscovery_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Discovery_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
 write.table(EABonn_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Bonn_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
 
+BEEADiscovery=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/GWAS/Discovery_BEEA_CO_gwas.assoc.logistic",fill=T))
+BEEABonn=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_autosomes_N.txt"))
+comsnp=intersect(BEEABonn$SNP,BEEADiscovery$SNP)
+idx=match(comsnp,BEEABonn$SNP)
+BEEABonn_com=BEEABonn[idx,]
+idx=match(comsnp,BEEADiscovery$SNP)
+BEEADiscovery_com=BEEADiscovery[idx,]
+write.table(BEEADiscovery_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Discovery_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
+write.table(BEEABonn_com,file="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_BD_autosomes_comsnp_N.txt",row.names = F,col.names = T,sep=" ",quote=F)
 
 #BEEA----
 BEEABonn=as.data.frame(fread("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_autosomes_N.txt"))

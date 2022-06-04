@@ -225,3 +225,101 @@ hist(res_min1$r2[!idx])
 boxplot(res_min1$r2~idx,ylab="R2",xlab="selected by fusion")
 idx=which(!rownames(res_min1) %in% fusiontable$symbol[fusiontable$avai==T])
 rownames(res_min1)[idx][which.max(res_min1$r2[idx])]
+
+#check how many selected snps are included in 1000 genome V3
+thousanddir="/fh/fast/stanford_j/Xiaoyu_Oct2020/Tools/HGDP_1000G_Merge/DataBases/1000G/"
+genelist=read.csv("../result/NEWGenesValidate_allcovar_r2_01_FWER.csv")
+snps_avai=data.frame(numsnp=rep(NA,nrow(genelist)),avaisnp=NA)
+organs=unique(genelist$tissue)
+LDREFdir="/fh/fast/dai_j/CancerGenomics/Tools/fusion_twas-master/LDREF/"
+for (ii in 1:length(organs))
+{
+  organ=organs[ii]
+  print(paste0(organ,"--------------------------------"))
+  outfolder=paste0("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_GTEx_",organ,"_HRC_MAF005_rmhighcor_allcovar")
+  load(paste0(outfolder,"/preidiction_michigan_model.RData")) #the saved model res_min
+  load(paste0(outfolder,"/bca_extractgenotype.RData")) #the saved genotype data, bca_genotype,bcabim
+  idxs=which(genelist$tissue==organ)
+  for (jj in idxs)
+  {
+    genename=genelist$gene[jj]
+    idx1=which(rownames(res_min)==genename)
+    snpnames=unlist(strsplit(res_min$selectedsnps[idx1],"|",fixed=T))
+    tmp=unlist(strsplit(snpnames,":"))
+    chr=tmp[1]
+    tmp=tmp[seq(2,length(tmp),2)]
+    tmp=unlist(strsplit(tmp,"_"))
+    pos=as.integer(tmp[seq(1,length(tmp),3)]) #hg38
+    alt=tmp[seq(2,length(tmp),3)]
+    ref=tmp[seq(3,length(tmp),3)]
+    #idx3=match(snpnames,paste0(bcabim$V1,":",bcabim$V4,"_",bcabim$V5,"_",bcabim$V6))
+    idx3=match(pos,bcabim$V4)
+    idx3=idx3[which(!is.na(idx3))]
+    if (length(idx3)>0)
+    {
+      snpnames=bcabim$V2[idx3] #hg19
+      tmp=unlist(strsplit(snpnames,":"))
+      chr=tmp[1]
+      tmp=tmp[seq(2,length(tmp),2)]
+      tmp=unlist(strsplit(tmp,"_"))
+      pos=as.integer(tmp[seq(1,length(tmp),3)]) #hg19
+      alt=tmp[seq(2,length(tmp),3)]
+      ref=tmp[seq(3,length(tmp),3)]
+      
+      LDREF=read.table(paste0(LDREFdir,"1000G.EUR.",chr,".bim"))
+      idx2=which(pos %in% LDREF$V4)
+      snps_avai$numsnp[jj]=length(snpnames)
+      snps_avai$avaisnp[jj]=length(idx2)
+    }
+    
+  }
+}
+snps_avai0=snps_avai
+quantile(snps_avai0$avaisnp/snps_avai0$numsnp)
+# 0%       25%       50%       75%      100% 
+# 0.0000000 0.1652985 0.2093750 0.3569579 0.7500000 
+snps_avai=data.frame(numsnp=rep(NA,nrow(genelist)),avaisnp=NA)
+organs=unique(genelist$tissue)
+for (ii in 1:length(organs))
+{
+  organ=organs[ii]
+  print(paste0(organ,"--------------------------------"))
+  outfolder=paste0("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/dist500K_GTEx_",organ,"_HRC_MAF005_rmhighcor_allcovar")
+  load(paste0(outfolder,"/preidiction_michigan_model.RData")) #the saved model res_min
+  load(paste0(outfolder,"/bca_extractgenotype.RData")) #the saved genotype data, bca_genotype,bcabim
+  idxs=which(genelist$tissue==organ)
+  for (jj in idxs)
+  {
+    genename=genelist$gene[jj]
+    idx1=which(rownames(res_min)==genename)
+    snpnames=unlist(strsplit(res_min$selectedsnps[idx1],"|",fixed=T))
+    tmp=unlist(strsplit(snpnames,":"))
+    chr=tmp[1]
+    tmp=tmp[seq(2,length(tmp),2)]
+    tmp=unlist(strsplit(tmp,"_"))
+    pos=as.integer(tmp[seq(1,length(tmp),3)]) #hg38
+    alt=tmp[seq(2,length(tmp),3)]
+    ref=tmp[seq(3,length(tmp),3)]
+    #idx3=match(snpnames,paste0(bcabim$V1,":",bcabim$V4,"_",bcabim$V5,"_",bcabim$V6))
+    idx3=match(pos,bcabim$V4)
+    idx3=idx3[which(!is.na(idx3))]
+    if (length(idx3)>0)
+    {
+      snpnames=bcabim$V2[idx3] #hg19
+      tmp=unlist(strsplit(snpnames,":"))
+      chr=tmp[1]
+      tmp=tmp[seq(2,length(tmp),2)]
+      tmp=unlist(strsplit(tmp,"_"))
+      pos=as.integer(tmp[seq(1,length(tmp),3)]) #hg19
+      alt=tmp[seq(2,length(tmp),3)]
+      ref=tmp[seq(3,length(tmp),3)]
+      LDREF=read.table(paste0(thousanddir,"ALL.chr",chr,".phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.bim"))
+      idx2=which(pos %in% LDREF$V4)
+      snps_avai$numsnp[jj]=length(snpnames)
+      snps_avai$avaisnp[jj]=length(idx2)
+    }
+  }
+}
+quantile(snps_avai$avaisnp/snps_avai$numsnp)
+# 0%       25%       50%       75%      100% 
+# 0.9803922 1.0000000 1.0000000 1.0000000 1.0000000 

@@ -242,7 +242,7 @@ STDERRLABEL SE
 EFFECT BETA
 PVALUE P
 WEIGHT N
-PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Bonn_autosomes_comsnp_N.txt
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Bonn_autosomes_N.txt
 #load the third input file
 MARKER SNP
 ALLELE non_effect_allele effect_allele
@@ -250,7 +250,7 @@ EFFECT beta
 PVALUE P
 STDERRLABEL se
 WEIGHT N
-PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Cambridge_autosomes_comsnp_N.txt
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Cambridge_autosomes_N.txt
 #load the third input file
 MARKER SNP
 ALLELE non_effect_allele effect_allele
@@ -258,12 +258,114 @@ EFFECT beta
 PVALUE P
 STDERRLABEL se
 WEIGHT N
-PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_Beacon_autosomes_comsnp_N.txt
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/EA_BEACON_autosomes_N.txt
 
 OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_Bonn_Cambridge_METAANALYSIS_EA_comsnp .tbl
+
 ANALYZE 
 
 QUIT
+
+/fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
+#BE studies---, standard error, add Beacon
+#load the secnod input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+SCHEME STDERR
+STDERRLABEL SE
+EFFECT BETA
+PVALUE P
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BE_Bonn_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BE_Cambridge_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BE_BEACON_autosomes_N.txt
+
+OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_Bonn_Cambridge_METAANALYSIS_BE_comsnp .tbl
+ANALYZE 
+
+QUIT
+
+/fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
+#BEEA studies---, standard error, add Beacon
+#load the secnod input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+SCHEME STDERR
+STDERRLABEL SE
+EFFECT BETA
+PVALUE P
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Cambridge_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_BEACON_autosomes_N.txt
+
+OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_Bonn_Cambridge_METAANALYSIS_BEEA_comsnp .tbl
+ANALYZE 
+
+QUIT
+
+#change strand of BEACON
+/fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
+#BEEA studies---, standard error, add Beacon
+#load the secnod input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+SCHEME STDERR
+STDERRLABEL SE
+EFFECT BETA
+PVALUE P
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Cambridge_autosomes_N.txt
+#load the third input file
+MARKER SNP
+ALLELE effect_allele non_effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_BEACON_autosomes_N.txt
+
+OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Beacon_Bonn_Cambridge_METAANALYSIS_BEEA_comsnp_new .tbl
+ANALYZE 
+
+QUIT
+
 
 #use BEACON +BONN
 /fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
@@ -427,6 +529,32 @@ ANALYZE
 
 QUIT
 
+/fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
+#EA studies---, standard error, add Beacon
+#load the secnod input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+SCHEME STDERR
+STDERRLABEL SE
+EFFECT BETA
+PVALUE P
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_genotyped_BD_autosomes_comsnp_N.txt
+
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Discovery_genotyped_BD_autosomes_comsnp_N.txt
+
+OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Discovery_Bonn_METAANALYSIS_BEEA_genotyped_comsnp .tbl
+ANALYZE 
+
+QUIT
+
 #use Discovery +BONN
 /fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
 #EA studies---, standard error, add Beacon
@@ -453,6 +581,33 @@ OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Discovery_Bonn_METAANALYSIS_EA
 ANALYZE 
 
 QUIT
+
+/fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal
+#EA studies---, standard error, add Beacon
+#load the secnod input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+SCHEME STDERR
+STDERRLABEL SE
+EFFECT BETA
+PVALUE P
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Bonn_BD_autosomes_comsnp_N.txt
+
+#load the third input file
+MARKER SNP
+ALLELE non_effect_allele effect_allele
+EFFECT beta
+PVALUE P
+STDERRLABEL se
+WEIGHT N
+PROCESS /fh/fast/dai_j/BEACON/BEACON_GRANT/result/BEEA_Discovery_BD_autosomes_comsnp_N.txt
+
+OUTFILE /fh/fast/dai_j/BEACON/BEACON_GRANT/result/Discovery_Bonn_METAANALYSIS_BEEA_comsnp .tbl
+ANALYZE 
+
+QUIT
+
 
 #BEACON+CAMBRIDGE
 /fh/fast/dai_j/CancerGenomics/Tools/METAL/build/bin/metal

@@ -35,7 +35,7 @@ if (grepl("_",tmp[1]))
 }
 
 
-### loading phenotype data ###
+### loading phenotype data for geneti association ###
 
 
 library(readxl)
@@ -62,8 +62,9 @@ colnames(Covariate[which(colnames(Covariate)=="ev4_bca")])="pc4"
 rownames(Covariate)=sampletable$localid
 Covariate$age[is.na(Covariate$age)]=mean(Covariate$age,na.rm = T)
 
-
+################################################
 ### loading summary stat data for validation ###
+################################################
 
 beaconfolder="/fh/fast/dai_j/BEACON/BEACON_GRANT/result/GWAS/imputed_GTExmodel/"
 
@@ -155,7 +156,10 @@ if (length(tmp)==0)
 #idx=which(rownames(res_min) %in% names(fdrres[i]))
 #selsnps=unique(unlist(strsplit(res_min$selectedsnps[idx],"|",fixed=T)))
 
+
+################################
 ##load GTEx gene expression data
+################################
 
 load("/fh/fast/dai_j/BEACON/BEACON_GRANT/result/GTExjunctiondatafor_prediction.RData")
 library(glmnet)
@@ -166,6 +170,7 @@ gr_snp=GRanges(seqnames = snppos$chr,ranges=IRanges(start=snppos$pos,width = 1))
 gr_pos=GRanges(seqnames = phenotypepos$chr,ranges=IRanges(start=phenotypepos$s1,end=phenotypepos$s2)) #geneexp
 
 
+#Finding genes we want to replicate and validate
 #compute
 #test=compute_cor_arow(i=31038,opt="min",ncv=10,distcutoff = 5e5)
 which(row.names(phenotype)=="DDX49")
@@ -183,6 +188,11 @@ which(row.names(phenotype)=="FBP2")
 
 
 genename = "HSP90AA1"
+
+############################################################################
+### run skat for the selected gene and validate in one big function below
+############################################################################
+
 
 TWAS_SKAT <- function(genename,cvmin=1) {
 result <- matrix(0,8,4)  
@@ -451,6 +461,8 @@ if (tmp[1]==tmp[2]) Y=Y+rnorm(length(Y),0,min(abs(Y))/1e6)
       }
       
       library(survey)
+      
+      
       ### validation in Bonn EA ###
       
       tmp=intersect(rsid[!is.na(rsid)],summarydat2$SNP)
